@@ -1,0 +1,31 @@
+{
+  "id": "frontend-vue",
+  "name": "JSHunter",
+  "version": "0.0.0",
+  "description": "JSHunter",
+  "author": {
+    "name": "Caido Labs Inc.",
+    "email": "dev@caido.io",
+    "url": "https://caido.io"
+  },
+  "links": {},
+  "plugins": [
+    {
+      "id": "backend",
+      "kind": "backend",
+      "name": "backend",
+      "entrypoint": "backend/index.js",
+      "runtime": "javascript"
+    },
+    {
+      "id": "frontend",
+      "kind": "frontend",
+      "name": "frontend",
+      "entrypoint": "frontend/index.js",
+      "style": "frontend/index.css",
+      "backend": {
+        "id": "backend"
+      }
+    }
+  ]
+}
