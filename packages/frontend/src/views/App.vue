@@ -2,11 +2,11 @@
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import InputSwitch from "primevue/inputswitch";
-import Textarea from "primevue/textarea";
+import Dropdown from "primevue/dropdown";
 import Toast from "primevue/toast";
 import { useToast } from "primevue/usetoast";
 import { useSDK } from "@/plugins/sdk";
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, nextTick } from "vue";
 
 // Retrieve the SDK instance to interact with the backend
 const sdk = useSDK();
@@ -17,51 +17,125 @@ const toast = useToast();
 // Reactive state
 const captureTraffic = ref(false);
 const port = ref(20450);
-const baseUrl = ref("http://localhost");
-const scope = ref("*");
+const selectedScope = ref<any>(null);
+const availableScopes = ref<any[]>([]);
 const isLoading = ref(false);
-const healthStatus = ref<"unknown" | "healthy" | "error">("unknown");
 const hasChanges = ref(false);
 
 // Track changes
-const originalConfig = ref({ captureTraffic: false, port: 20450, baseUrl: "http://localhost", scope: "*" });
+const originalConfig = ref({ captureTraffic: false, port: 20450, selectedScope: null });
 
 // Load current configuration on mount
 onMounted(async () => {
+  await loadScopes();
   await loadConfig();
 });
 
-// Watch for changes
+// Watch for changes (excluding traffic capture since it's applied immediately)
 const watchChanges = () => {
   hasChanges.value = 
-    captureTraffic.value !== originalConfig.value.captureTraffic ||
     port.value !== originalConfig.value.port ||
-    baseUrl.value !== originalConfig.value.baseUrl ||
-    scope.value !== originalConfig.value.scope;
+    selectedScope.value?.id !== originalConfig.value.selectedScope?.id;
+};
+
+// Load available scopes from Caido
+const loadScopes = async () => {
+  try {
+    // Get global Caido scopes
+    const caidoScopes = sdk.scopes.getScopes();
+    
+    // Add default "No scope selected" option at the beginning
+    const defaultScope = {
+      id: "none",
+      name: "No scope selected",
+      allowlist: [],
+      denylist: []
+    };
+    
+    // Add "Capture all traffic" option as second option
+    const captureAllScope = {
+      id: "all",
+      name: "Capture all traffic",
+      allowlist: ["*"],
+      denylist: []
+    };
+    
+    // Combine: defaults + Caido global scopes
+    availableScopes.value = [
+      defaultScope, 
+      captureAllScope,
+      ...caidoScopes
+    ];
+    
+    console.log("Loaded scopes:", availableScopes.value.map(s => ({ id: s.id, name: s.name })));
+    
+    // Always default to "No scope selected"
+    selectedScope.value = defaultScope;
+  } catch (error) {
+    toast.add({
+      severity: "error",
+      summary: "Error",
+      detail: "Error loading scopes",
+      life: 4000
+    });
+  }
 };
 
 // Load configuration from backend
-const loadConfig = async (showToast = false) => {
+const loadConfig = async () => {
   try {
     const config = await sdk.backend.getConfig();
+    console.log("Loaded config from backend:", config);
+    
     captureTraffic.value = config.captureTraffic;
     port.value = config.port;
-    baseUrl.value = config.baseUrl;
-    scope.value = config.scope || "*";
     
-    // Store original config
-    originalConfig.value = { ...config, scope: config.scope || "*" };
-    hasChanges.value = false;
-    
-    if (showToast) {
-      toast.add({
-        severity: "success",
-        summary: "Success",
-        detail: "Configuration loaded successfully",
-        life: 3000
-      });
+    // Handle the scope object from backend
+    if (config.scope) {
+      // Backend sends complete scope object
+      if (config.scope.id === "none") {
+        selectedScope.value = {
+          id: "none",
+          name: "No scope selected",
+          allowlist: [],
+          denylist: []
+        };
+      } else if (config.scope.id === "all") {
+        selectedScope.value = {
+          id: "all",
+          name: "Capture all traffic",
+          allowlist: ["*"],
+          denylist: []
+        };
+      } else {
+        // Try to find the scope in available Caido scopes
+        const foundScope = availableScopes.value.find(s => s.id === config.scope.id);
+        if (foundScope) {
+          selectedScope.value = foundScope;
+        } else {
+          // Use the scope from backend (might be from a previous session)
+          selectedScope.value = config.scope;
+        }
+      }
+    } else {
+      // Default to "No scope selected" if no scope info
+      selectedScope.value = {
+        id: "none",
+        name: "No scope selected",
+        allowlist: [],
+        denylist: []
+      };
     }
+    
+    // Update original config for change detection
+    originalConfig.value = {
+      captureTraffic: config.captureTraffic,
+      port: config.port,
+      selectedScope: selectedScope.value
+    };
+    hasChanges.value = false;
   } catch (error) {
+    console.error("Error loading config:", error);
     toast.add({
       severity: "error",
       summary: "Error",
@@ -71,22 +145,20 @@ const loadConfig = async (showToast = false) => {
   }
 };
 
-// Save configuration to backend
+// Save configuration to backend (excluding traffic capture which is handled separately)
 const saveConfig = async () => {
   try {
+    // Send the complete scope object to backend
     await sdk.backend.updateConfig({
       port: port.value,
-      baseUrl: baseUrl.value,
-      captureTraffic: captureTraffic.value,
-      scope: scope.value
+      scope: selectedScope.value // Send the complete scope object
     });
     
-    // Update original config
+    // Update original config (keep current traffic capture state)
     originalConfig.value = {
       captureTraffic: captureTraffic.value,
       port: port.value,
-      baseUrl: baseUrl.value,
-      scope: scope.value
+      selectedScope: selectedScope.value
     };
     hasChanges.value = false;
     
@@ -106,12 +178,14 @@ const saveConfig = async () => {
   }
 };
 
-// Toggle traffic capture
+// Toggle traffic capture (applies immediately)
 const toggleCapture = async () => {
   try {
     const newState = await sdk.backend.toggleTrafficCapture(captureTraffic.value);
     captureTraffic.value = newState;
-    watchChanges();
+    
+    // Update the original config to reflect the immediate change
+    originalConfig.value.captureTraffic = newState;
     
     toast.add({
       severity: "info",
@@ -129,50 +203,72 @@ const toggleCapture = async () => {
   }
 };
 
-// Perform health check
-const performHealthCheck = async () => {
+// Watch for input changes
+const onInputChange = () => {
+  watchChanges();
+};
+
+// Handle scope selection changes
+const onScopeChange = async () => {
+  console.log("Scope changed to:", selectedScope.value);
+  
   try {
-    const result = await sdk.backend.heathCheck();
-    if (result.success) {
-      healthStatus.value = "healthy";
+    // Save scope change immediately to backend
+    await sdk.backend.updateConfig({
+      scope: selectedScope.value
+    });
+    
+    // Update original config to reflect the immediate change
+    originalConfig.value.selectedScope = selectedScope.value;
+    
+    toast.add({
+      severity: "success",
+      summary: "Scope Updated",
+      detail: `Scope changed to: ${selectedScope.value?.name || 'Unknown'}`,
+      life: 3000
+    });
+    
+    // Show warning if "No scope selected" is chosen while traffic capture is enabled
+    if (selectedScope.value?.id === "none" && captureTraffic.value) {
       toast.add({
-        severity: "success",
-        summary: "Connection Test",
-        detail: "Backend connection successful",
-        life: 3000
-      });
-    } else {
-      healthStatus.value = "error";
-      toast.add({
-        severity: "error",
-        summary: "Connection Failed",
-        detail: `Connection error: ${result.error}`,
+        severity: "warn",
+        summary: "Warning",
+        detail: "No scope selected - traffic capture will not work until you select a scope",
         life: 5000
       });
     }
   } catch (error) {
-    healthStatus.value = "error";
+    console.error("Error updating scope:", error);
     toast.add({
       severity: "error",
-      summary: "Connection Error",
-      detail: "Error checking connection",
+      summary: "Error",
+      detail: "Failed to update scope",
       life: 4000
     });
   }
 };
 
-// Computed property for connection status
-const connectionStatus = computed(() => {
-  switch (healthStatus.value) {
-    case "healthy": return { text: "Connected", color: "text-green-600" };
-    case "error": return { text: "Disconnected", color: "text-red-600" };
-    default: return { text: "Unknown", color: "text-gray-500" };
+// Debug function to check plugin status
+const debugStatus = async () => {
+  try {
+    const result = await sdk.backend.debugStatus();
+    console.log("Debug result:", result);
+    
+    toast.add({
+      severity: "info",
+      summary: "Debug Status",
+      detail: `Plugin working: ${result.success ? 'YES' : 'NO'}. Check console for details.`,
+      life: 5000
+    });
+  } catch (error) {
+    console.error("Debug error:", error);
+    toast.add({
+      severity: "error",
+      summary: "Debug Error",
+      detail: "Failed to get debug status. Check console for details.",
+      life: 5000
+    });
   }
-});
-
-// Watch for input changes
-const onInputChange = () => {
-  watchChanges();
 };
 </script>
 
@@ -181,10 +277,10 @@ const onInputChange = () => {
     <!-- Toast Component -->
     <Toast />
     
-    <!-- Left Panel - Settings (40%) -->
+    <!-- Settings Panel -->
     <div class="settings-panel">
       <!-- Header -->
-      <h2 class="text-xl font-bold mb-6 text-white">Settings</h2>
+      <h2 class="text-xl font-bold mb-6 text-white">JSHunter Settings</h2>
       
       <!-- Traffic Capture Setting -->
       <div class="mb-6">
@@ -194,27 +290,18 @@ const onInputChange = () => {
               Traffic Capture
             </label>
             <p class="text-sm opacity-75">
-              Enable automatic interception of requests and responses
+              Enable automatic interception of responses
             </p>
+            <!-- Warning when no scope is selected -->
+            <div v-if="!selectedScope || selectedScope.id === 'none'" class="text-yellow-500 mt-1 text-sm">
+              ⚠️ No scope selected - traffic capture will not work
+            </div>
           </div>
           <InputSwitch 
             v-model="captureTraffic" 
             @change="toggleCapture"
           />
         </div>
-      </div>
-
-      <!-- Backend URL Setting -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium mb-2">
-          Base URL
-        </label>
-        <InputText 
-          v-model="baseUrl"
-          placeholder="http://localhost"
-          class="w-full"
-          @input="onInputChange"
-        />
       </div>
 
       <!-- Port Setting -->
@@ -231,35 +318,52 @@ const onInputChange = () => {
         />
       </div>
 
-      <!-- Scope Configuration -->
+      <!-- Scope Selection -->
       <div class="mb-6">
         <label class="block text-sm font-medium mb-2">
           Scope
         </label>
         <p class="text-sm opacity-75 mb-2">
-          Define URL patterns to capture (one per line). Use * for wildcards.
+          Select a scope from your Caido configuration to define which URLs to capture.
         </p>
-        <Textarea 
-          v-model="scope"
-          placeholder="*&#10;*.example.com&#10;https://api.target.com/*"
+        <Dropdown 
+          v-model="selectedScope"
+          :options="availableScopes"
+          optionLabel="name"
+          placeholder="Select a scope"
           class="w-full"
-          rows="4"
-          @input="onInputChange"
-        />
-      </div>
-
-      <!-- Connection Status -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium mb-2">
-          Backend Status
-        </label>
-        <div class="flex items-center gap-2">
-          <div :class="healthStatus === 'healthy' ? 'bg-green-500' : healthStatus === 'error' ? 'bg-red-500' : 'bg-gray-400'" 
-               class="w-2 h-2 rounded-full"></div>
-          <span :class="connectionStatus.color" class="text-sm font-medium">
-            {{ connectionStatus.text }}
-          </span>
-        </div>
+          @change="onScopeChange"
+        >
+          <template #option="slotProps">
+            <div class="flex flex-col">
+              <span class="font-medium">{{ slotProps.option.name }}</span>
+              <span v-if="slotProps.option.id === 'none'" class="text-sm opacity-75">
+                No filtering - traffic capture will not work
+              </span>
+              <span v-else-if="slotProps.option.id === 'all'" class="text-sm opacity-75">
+                Capture all traffic (no filtering)
+              </span>
+              <span v-else class="text-sm opacity-75">
+                {{ slotProps.option.allowlist?.length || 0 }} allowed, {{ slotProps.option.denylist?.length || 0 }} denied
+              </span>
+            </div>
+          </template>
+          <template #value="slotProps">
+            <div v-if="slotProps.value" class="flex flex-col">
+              <span class="font-medium">{{ slotProps.value.name }}</span>
+              <span v-if="slotProps.value.id === 'none'" class="text-sm opacity-75">
+                No filtering - traffic capture will not work
+              </span>
+              <span v-else-if="slotProps.value.id === 'all'" class="text-sm opacity-75">
+                Capture all traffic (no filtering)
+              </span>
+              <span v-else class="text-sm opacity-75">
+                {{ slotProps.value.allowlist?.length || 0 }} allowed, {{ slotProps.value.denylist?.length || 0 }} denied
+              </span>
+            </div>
+            <span v-else>Select a scope</span>
+          </template>
+        </Dropdown>
       </div>
 
       <!-- Action Buttons -->
@@ -269,80 +373,20 @@ const onInputChange = () => {
           @click="saveConfig"
           :disabled="!hasChanges"
         />
-        
         <Button 
-          label="Test Connection"
-          @click="performHealthCheck"
+          label="Debug Status"
+          @click="debugStatus"
           severity="secondary"
+          outlined
         />
       </div>
 
       <!-- Note -->
       <div class="mt-6 pt-4 border-t border-gray-700">
         <p class="text-sm opacity-75">
-          <strong>Note:</strong> Changes will be applied immediately when you click "Save Changes".
-          The traffic capture toggle takes effect immediately.
+          <strong>Note:</strong> URL and port changes require clicking "Save Changes" to apply.
+          Traffic capture toggle and scope selection take effect immediately.
         </p>
-      </div>
-    </div>
-
-    <!-- Right Panel - Information (60%) -->
-    <div class="info-panel">
-      <h2 class="text-xl font-bold mb-6 text-white">About JSHunter</h2>
-      
-      <div class="space-y-4">
-        <p class="text-gray-300">
-          <strong>JSHunter</strong> is a Caido plugin designed to capture and analyze web traffic for security testing purposes.
-        </p>
-        
-        <p class="text-gray-300">
-          This plugin automatically intercepts HTTP requests and responses when traffic capture is enabled, 
-          sending the data to your configured backend for analysis and storage.
-        </p>
-        
-        <div class="mt-6 pt-4 border-t border-gray-700">
-          <h3 class="text-lg font-semibold mb-3 text-white">Features</h3>
-          <ul class="space-y-2 text-gray-300">
-            <li class="flex items-start gap-2">
-              <span class="text-green-500 mt-1">•</span>
-              <span>Automatic traffic interception</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-green-500 mt-1">•</span>
-              <span>Configurable backend connection</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-green-500 mt-1">•</span>
-              <span>Real-time connection status monitoring</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-green-500 mt-1">•</span>
-              <span>Request/response data hashing</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="mt-6 pt-4 border-t border-gray-700">
-          <h3 class="text-lg font-semibold mb-3 text-white">Usage</h3>
-          <ol class="space-y-2 text-gray-300">
-            <li class="flex items-start gap-2">
-              <span class="text-blue-500 font-medium">1.</span>
-              <span>Configure your backend URL and port</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-blue-500 font-medium">2.</span>
-              <span>Test the connection to ensure it's working</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-blue-500 font-medium">3.</span>
-              <span>Enable traffic capture to start intercepting requests</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="text-blue-500 font-medium">4.</span>
-              <span>Save your configuration when ready</span>
-            </li>
-          </ol>
-        </div>
       </div>
     </div>
   </div>
@@ -352,22 +396,15 @@ const onInputChange = () => {
 .app-container {
   display: flex;
   height: 100vh;
+  padding: 20px;
 }
 
 .settings-panel {
-  flex: 0 0 40%;
-  padding: 20px;
-  overflow-y: auto;
-  border-right: 1px solid var(--border-color, #374151);
+  flex: 1;
+  max-width: 600px;
 }
 
-.info-panel {
-  flex: 0 0 60%;
-  padding: 20px;
-  overflow-y: auto;
-}
-
-.p-inputtext, .p-textarea {
+.p-inputtext, .p-dropdown {
   border: 1px solid var(--border-color, #4b5563);
   border-radius: 4px;
   padding: 8px 12px;
@@ -375,14 +412,27 @@ const onInputChange = () => {
   color: var(--text-color, white);
 }
 
-.p-inputtext:focus, .p-textarea:focus {
+.p-inputtext:focus, .p-dropdown:focus-within {
   border-color: var(--primary-color, #3b82f6);
   box-shadow: 0 0 0 2px var(--primary-color-alpha, rgba(59, 130, 246, 0.1));
   outline: none;
 }
 
-.p-inputtext::placeholder, .p-textarea::placeholder {
+.p-inputtext::placeholder {
   color: var(--text-color-secondary, #9ca3af);
+}
+
+.p-dropdown-panel {
+  background: var(--surface-card, #374151);
+  border: 1px solid var(--border-color, #4b5563);
+}
+
+.p-dropdown-item {
+  color: var(--text-color, white);
+}
+
+.p-dropdown-item:hover {
+  background: var(--surface-hover, #4b5563);
 }
 
 .p-button {

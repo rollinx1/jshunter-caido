@@ -16,7 +16,7 @@ import type { FrontendSDK } from "./types";
 // This is the entry point for the frontend plugin
 export const init = (sdk: FrontendSDK) => {
   const app = createApp(App);
-
+  
   // Load the PrimeVue component library
   app.use(PrimeVue, {
     unstyled: true,
