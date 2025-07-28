@@ -370,7 +370,7 @@ const onScopeChange = async () => {
       <!-- Note -->
       <div class="mt-6 pt-4 border-t border-gray-700">
         <p class="text-sm opacity-75">
-          <strong>Note:</strong> URL and port changes require clicking "Save Changes" to apply.
+          <strong>Note:</strong> Port changes require clicking "Save Changes" to apply.
           Traffic capture toggle and scope selection take effect immediately.
         </p>
       </div>

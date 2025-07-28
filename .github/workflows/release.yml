@@ -8,6 +8,7 @@ on:
       - 'caido.config.ts'
       - 'package.json'
       - 'pnpm-*.yaml'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       version:
