@@ -8,6 +8,20 @@ import { useToast } from "primevue/usetoast";
 import { useSDK } from "@/plugins/sdk";
 import { ref, onMounted } from "vue";
 
+// Define interfaces for type safety
+interface ScopeConfig {
+  id: string;
+  name: string;
+  allowlist: string[];
+  denylist: string[];
+}
+
+interface AppConfig {
+  captureTraffic: boolean;
+  port: number;
+  selectedScope: ScopeConfig | null;
+}
+
 // Retrieve the SDK instance to interact with the backend
 const sdk = useSDK();
 
@@ -17,12 +31,12 @@ const toast = useToast();
 // Reactive state
 const captureTraffic = ref(false);
 const port = ref(20450);
-const selectedScope = ref<any>(null);
-const availableScopes = ref<any[]>([]);
+const selectedScope = ref<ScopeConfig | null>(null);
+const availableScopes = ref<ScopeConfig[]>([]);
 const hasChanges = ref(false);
 
 // Track changes
-const originalConfig = ref({ captureTraffic: false, port: 20450, selectedScope: null });
+const originalConfig = ref<AppConfig>({ captureTraffic: false, port: 20450, selectedScope: null });
 
 // Load current configuration on mount
 onMounted(async () => {
@@ -150,7 +164,7 @@ const saveConfig = async () => {
     // Send the complete scope object to backend
     await sdk.backend.updateConfig({
       port: port.value,
-      scope: selectedScope.value // Send the complete scope object
+      scope: selectedScope.value || undefined // Send the complete scope object
     });
     
     // Update original config (keep current traffic capture state)
@@ -214,7 +228,7 @@ const onScopeChange = async () => {
   try {
     // Save scope change immediately to backend
     await sdk.backend.updateConfig({
-      scope: selectedScope.value
+      scope: selectedScope.value || undefined
     });
     
     // Update original config to reflect the immediate change
