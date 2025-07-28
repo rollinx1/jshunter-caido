@@ -17,9 +17,7 @@ env:
   NODE_VERSION: 20
   PNPM_VERSION: 9
 
-defaults:
-  run:
-    working-directory: CaidoExtension
+# Remove working directory default since we're already in CaidoExtension folder
 
 jobs:
   build:
@@ -70,5 +68,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jshunter-caido-extension-${{ github.sha }}
-          path: CaidoExtension/dist/plugin_package.zip
+          path: dist/plugin_package.zip
           retention-days: 7 
