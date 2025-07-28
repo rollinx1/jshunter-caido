@@ -206,33 +206,7 @@ async function sendToBackend(sdk: SDK, requestId: string) {
   }
 }
 
-async function debugStatus(sdk: SDK) {
-  try {
-    const config = database.getConfig();
-    sdk.console.log(`=== DEBUG STATUS ===`);
-    sdk.console.log(`Database initialized: ${database ? 'YES' : 'NO'}`);
-    sdk.console.log(`Current config: ${JSON.stringify(config, null, 2)}`);
-    sdk.console.log(`Traffic capture enabled: ${config.captureTraffic}`);
-    sdk.console.log(`Selected scope: ${config.scope.id} (${config.scope.name})`);
-    sdk.console.log(`Scope allowlist: ${JSON.stringify(config.scope.allowlist)}`);
-    sdk.console.log(`Scope denylist: ${JSON.stringify(config.scope.denylist)}`);
-    sdk.console.log(`=== END DEBUG ===`);
 
-    return {
-      success: true,
-      database_initialized: !!database,
-      config: config,
-      timestamp: new Date().toISOString()
-    };
-  } catch (error) {
-    sdk.console.error(`Debug status error: ${error}`);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      timestamp: new Date().toISOString()
-    };
-  }
-}
 
 export type API = DefineAPI<{
   sendToBackend: typeof sendToBackend;
@@ -240,7 +214,6 @@ export type API = DefineAPI<{
   updateConfig: typeof updateConfig;
   getConfig: typeof getConfig;
   toggleTrafficCapture: typeof toggleTrafficCapture;
-  debugStatus: typeof debugStatus;
 }>;
 
 export async function init(sdk: SDK<API>) {
@@ -255,7 +228,6 @@ export async function init(sdk: SDK<API>) {
     sdk.api.register("updateConfig", updateConfig)
     sdk.api.register("getConfig", getConfig)
     sdk.api.register("toggleTrafficCapture", toggleTrafficCapture)
-    sdk.api.register("debugStatus", debugStatus)
 
     sdk.console.log(`JSHunter plugin initialized successfully`);
 

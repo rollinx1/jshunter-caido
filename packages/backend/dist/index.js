@@ -266,32 +266,6 @@ async function sendToBackend(sdk, requestId) {
     return { success: false, error: errorMessage };
   }
 }
-async function debugStatus(sdk) {
-  try {
-    const config2 = database.getConfig();
-    sdk.console.log(`=== DEBUG STATUS ===`);
-    sdk.console.log(`Database initialized: ${database ? "YES" : "NO"}`);
-    sdk.console.log(`Current config: ${JSON.stringify(config2, null, 2)}`);
-    sdk.console.log(`Traffic capture enabled: ${config2.captureTraffic}`);
-    sdk.console.log(`Selected scope: ${config2.scope.id} (${config2.scope.name})`);
-    sdk.console.log(`Scope allowlist: ${JSON.stringify(config2.scope.allowlist)}`);
-    sdk.console.log(`Scope denylist: ${JSON.stringify(config2.scope.denylist)}`);
-    sdk.console.log(`=== END DEBUG ===`);
-    return {
-      success: true,
-      database_initialized: !!database,
-      config: config2,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  } catch (error) {
-    sdk.console.error(`Debug status error: ${error}`);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
-    };
-  }
-}
 async function init(sdk) {
   try {
     database = new Database(sdk);
@@ -301,7 +275,6 @@ async function init(sdk) {
     sdk.api.register("updateConfig", updateConfig);
     sdk.api.register("getConfig", getConfig);
     sdk.api.register("toggleTrafficCapture", toggleTrafficCapture);
-    sdk.api.register("debugStatus", debugStatus);
     sdk.console.log(`JSHunter plugin initialized successfully`);
     const initialConfig = database.getConfig();
     sdk.console.log(`Initial config: ${JSON.stringify(initialConfig)}`);

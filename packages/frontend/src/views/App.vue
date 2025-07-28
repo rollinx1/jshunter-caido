@@ -6,7 +6,7 @@ import Dropdown from "primevue/dropdown";
 import Toast from "primevue/toast";
 import { useToast } from "primevue/usetoast";
 import { useSDK } from "@/plugins/sdk";
-import { ref, onMounted, nextTick } from "vue";
+import { ref, onMounted } from "vue";
 
 // Retrieve the SDK instance to interact with the backend
 const sdk = useSDK();
@@ -19,7 +19,6 @@ const captureTraffic = ref(false);
 const port = ref(20450);
 const selectedScope = ref<any>(null);
 const availableScopes = ref<any[]>([]);
-const isLoading = ref(false);
 const hasChanges = ref(false);
 
 // Track changes
@@ -248,28 +247,7 @@ const onScopeChange = async () => {
   }
 };
 
-// Debug function to check plugin status
-const debugStatus = async () => {
-  try {
-    const result = await sdk.backend.debugStatus();
-    console.log("Debug result:", result);
-    
-    toast.add({
-      severity: "info",
-      summary: "Debug Status",
-      detail: `Plugin working: ${result.success ? 'YES' : 'NO'}. Check console for details.`,
-      life: 5000
-    });
-  } catch (error) {
-    console.error("Debug error:", error);
-    toast.add({
-      severity: "error",
-      summary: "Debug Error",
-      detail: "Failed to get debug status. Check console for details.",
-      life: 5000
-    });
-  }
-};
+
 </script>
 
 <template>
@@ -372,12 +350,6 @@ const debugStatus = async () => {
           label="Save Changes"
           @click="saveConfig"
           :disabled="!hasChanges"
-        />
-        <Button 
-          label="Debug Status"
-          @click="debugStatus"
-          severity="secondary"
-          outlined
         />
       </div>
 
