@@ -1,183 +1,71 @@
-name: JSHunter Caido Plugin
+name: Release JSHunter Plugin
 
 on:
   push:
-    branches: [ main, master ]
-    paths:
-      - 'packages/**'
-      - 'caido.config.ts'
-      - 'package.json'
-      - 'pnpm-*.yaml'
-      - '.github/workflows/release.yml'
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (optional, will use tag or auto-detect)'
-        required: false
-        type: string
 
 env:
   NODE_VERSION: 20
   PNPM_VERSION: 9
 
 jobs:
-  release:
+  build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout project
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-          run_install: true
 
-      - name: Verify dependencies
-        run: |
-          pnpm list
-          echo "Dependencies installed successfully"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: pnpm typecheck
+      - name: Build plugin
+        run: pnpm build
 
-      - name: Build package
-        run: |
-          pnpm build
-          echo "Build completed successfully"
-
-      - name: Verify build output
-        run: |
-          if [ ! -f "dist/plugin_package.zip" ]; then
-            echo "❌ Build failed: plugin_package.zip not found"
-            exit 1
-          fi
-          ls -la dist/
-          echo "Build verification passed"
-
-      - name: Sign package
+      - name: Prepare release
         working-directory: dist
         run: |
-                      if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
-              echo "No PRIVATE_KEY secret found. Skipping package signing."
-              echo "To enable signing, set an ed25519 key as PRIVATE_KEY in GitHub Action secrets."
-            else
-              echo "Signing package..."
-              echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
-              openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
-              rm private_key.pem
-              echo "Package signed successfully"
-            fi
-
-      - name: Extract version and metadata
-        id: meta
-        working-directory: dist
-        run: |
-          # Use current timestamp for latest builds
-          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
-          SHORT_SHA=${GITHUB_SHA:0:7}
-          VERSION="latest-${TIMESTAMP}-${SHORT_SHA}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          
-          # Extract plugin name from manifest
-          PLUGIN_NAME=$(unzip -p plugin_package.zip manifest.json | jq -r .name)
-          echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
-          
-          # Create descriptive filename
-          RELEASE_NAME="JSHunter-Caido-Extension-Latest"
-          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
-          
-          echo "Plugin: ${PLUGIN_NAME}"
-          echo "Version: ${VERSION}"
-          echo "Release name: ${RELEASE_NAME}"
-
-      - name: Prepare release artifacts
-        working-directory: dist
-        run: |
-          # Rename files with descriptive names
           cp plugin_package.zip JSHunter-Plugin.zip
-          
-          if [ -f "plugin_package.zip.sig" ]; then
-            cp plugin_package.zip.sig JSHunter-Plugin.zip.sig
-          fi
-          
-          # Create checksum
           sha256sum JSHunter-Plugin.zip > JSHunter-Plugin.zip.sha256
-          
           ls -la
-          echo "Release artifacts prepared"
 
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          cat > release_notes.md << 'EOF'
-          ## JSHunter Caido Extension - Latest Build
-          
-          **Build:** ${{ steps.meta.outputs.version }}  
-          **Commit:** ${{ github.sha }}  
-          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          
-          ### Installation
-          1. Download `JSHunter-Plugin.zip`
-          2. Open Caido and go to **Settings** → **Plugins**
-          3. Click **Install Plugin** and select the downloaded ZIP file
-          4. Restart Caido to activate the extension
-          
-          ### Security
-          - The extension package is signed for integrity verification
-          - SHA256 checksum is provided for additional verification
-          
-          ### Files in this release
-          - `JSHunter-Plugin.zip` - Main extension package
-          - `JSHunter-Plugin.zip.sig` - Digital signature (if available)
-          - `JSHunter-Plugin.zip.sha256` - SHA256 checksum
-          
-          ### What's Included
-          - Complete JSHunter functionality for Caido
-          - JavaScript analysis and endpoint discovery
-          - Traffic capture with scope filtering
-          - Real-time analysis of HTTP traffic
-          
-          ---
-          *This is an automatic build from the latest commit on main branch.*
-          EOF
-          
-          echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
+      - name: Create Release
         uses: ncipollo/release-action@v1
         with:
           tag: latest
-          name: ${{ steps.meta.outputs.release_name }}
-          commit: ${{ github.sha }}
-          bodyFile: release_notes.md
+          name: JSHunter Plugin - Latest
+          body: |
+            ## JSHunter Caido Plugin - Latest Build
+            
+            **Commit:** ${{ github.sha }}
+            **Date:** ${{ github.event.head_commit.timestamp }}
+            
+            ### Installation
+            1. Download `JSHunter-Plugin.zip`
+            2. Open Caido → Settings → Plugins
+            3. Install the downloaded ZIP file
+            4. Restart Caido
+            
+            ### Files
+            - `JSHunter-Plugin.zip` - Main plugin package
+            - `JSHunter-Plugin.zip.sha256` - SHA256 checksum
           artifacts: |
             dist/JSHunter-Plugin.zip
-            dist/JSHunter-Plugin.zip.sig
             dist/JSHunter-Plugin.zip.sha256
-          artifactErrorsFailBuild: false
-          draft: false
-          prerelease: false
           allowUpdates: true
           removeArtifacts: true
-          makeLatest: true
-
-      - name: Release Summary
-        run: |
-          echo "Release created successfully!"
-          echo "Package: JSHunter-Plugin.zip"
-          echo "Tag: latest"
-          echo "Build: ${{ steps.meta.outputs.version }}"
-          echo "Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/latest"
+          makeLatest: true 
