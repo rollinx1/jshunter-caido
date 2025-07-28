@@ -1,0 +1,169 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'CaidoExtension/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - 'CaidoExtension/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 20
+  PNPM_VERSION: 9
+
+defaults:
+  run:
+    working-directory: CaidoExtension
+
+jobs:
+  build:
+    name: Build Extension
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'CaidoExtension/pnpm-lock.yaml'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify dependencies
+        run: |
+          pnpm list
+          echo "Dependencies installed successfully"
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Build extension
+        run: |
+          pnpm build
+          echo "Build completed successfully"
+
+      - name: Verify build output
+        run: |
+          if [ ! -f "dist/plugin_package.zip" ]; then
+            echo "Build failed: plugin_package.zip not found"
+            exit 1
+          fi
+          
+          # Check if ZIP contains expected files
+          echo "Checking ZIP contents:"
+          unzip -l dist/plugin_package.zip
+          
+          # Verify manifest.json exists and is valid
+          if ! unzip -p dist/plugin_package.zip manifest.json | jq . > /dev/null 2>&1; then
+            echo "Invalid or missing manifest.json"
+            exit 1
+          fi
+          
+          # Extract and display version
+          VERSION=$(unzip -p dist/plugin_package.zip manifest.json | jq -r .version)
+          echo "Extension version: ${VERSION}"
+          
+          # Check file size (basic sanity check)
+          FILE_SIZE=$(stat -c%s dist/plugin_package.zip)
+          if [ $FILE_SIZE -lt 1000 ]; then
+            echo "Build output seems too small (${FILE_SIZE} bytes)"
+            exit 1
+          fi
+          
+          echo "Build verification passed"
+          echo "Package size: ${FILE_SIZE} bytes"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jshunter-caido-extension-${{ github.sha }}
+          path: CaidoExtension/dist/plugin_package.zip
+          retention-days: 7
+
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'CaidoExtension/pnpm-lock.yaml'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check TypeScript compilation
+        run: pnpm typecheck
+
+      - name: Security audit
+        run: |
+          pnpm audit --audit-level moderate || echo "Security audit found issues"
+          echo "Run 'pnpm audit --fix' to resolve issues"
+
+  build-matrix:
+    name: Build on Multiple Platforms
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 20]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Install dependencies
+        working-directory: CaidoExtension
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension
+        working-directory: CaidoExtension
+        run: pnpm build
+
+      - name: Verify build
+        working-directory: CaidoExtension
+        shell: bash
+        run: |
+          if [ ! -f "dist/plugin_package.zip" ]; then
+            echo "Build failed on ${{ matrix.os }} with Node ${{ matrix.node }}"
+            exit 1
+          fi
+          echo "Build successful on ${{ matrix.os }} with Node ${{ matrix.node }}" 

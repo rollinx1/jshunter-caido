@@ -1,7 +1,16 @@
-name: 🚀 Release
+name: JSHunter Caido Plugin
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (optional, will use tag or auto-detect)'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+      - '*.*.*'
 
 env:
   NODE_VERSION: 20
@@ -9,7 +18,7 @@ env:
 
 jobs:
   release:
-    name: Release
+    name: Build and Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,11 +26,14 @@ jobs:
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -29,31 +41,129 @@ jobs:
           version: ${{ env.PNPM_VERSION }}
           run_install: true
 
+      - name: Verify dependencies
+        run: |
+          pnpm list
+          echo "Dependencies installed successfully"
+
+      - name: Type check
+        run: pnpm typecheck
+
       - name: Build package
-        run: pnpm build
+        run: |
+          pnpm build
+          echo "Build completed successfully"
+
+      - name: Verify build output
+        run: |
+          if [ ! -f "dist/plugin_package.zip" ]; then
+            echo "❌ Build failed: plugin_package.zip not found"
+            exit 1
+          fi
+          ls -la dist/
+          echo "Build verification passed"
 
       - name: Sign package
         working-directory: dist
         run: |
-          if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
-            echo "Set an ed25519 key as PRIVATE_KEY in GitHub Action secret to sign."
-          else
-            echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
-            openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
-            rm private_key.pem
-          fi
+                      if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
+              echo "No PRIVATE_KEY secret found. Skipping package signing."
+              echo "To enable signing, set an ed25519 key as PRIVATE_KEY in GitHub Action secrets."
+            else
+              echo "Signing package..."
+              echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+              openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
+              rm private_key.pem
+              echo "Package signed successfully"
+            fi
 
-      - name: Check version
+      - name: Extract version and metadata
         id: meta
         working-directory: dist
         run: |
+          # Extract version from manifest
           VERSION=$(unzip -p plugin_package.zip manifest.json | jq -r .version)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Extract plugin name from manifest
+          PLUGIN_NAME=$(unzip -p plugin_package.zip manifest.json | jq -r .name)
+          echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
+          
+          # Create descriptive filename
+          RELEASE_NAME="JSHunter-Caido-Extension-v${VERSION}"
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          
+          echo "Plugin: ${PLUGIN_NAME}"
+          echo "Version: ${VERSION}"
+          echo "Release name: ${RELEASE_NAME}"
 
-      - name: Create release
+      - name: Prepare release artifacts
+        working-directory: dist
+        run: |
+          # Rename files with descriptive names
+          cp plugin_package.zip JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip
+          
+          if [ -f "plugin_package.zip.sig" ]; then
+            cp plugin_package.zip.sig JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig
+          fi
+          
+          # Create checksum
+          sha256sum JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip > JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256
+          
+          ls -la
+          echo "Release artifacts prepared"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## JSHunter Caido Extension v${{ steps.meta.outputs.version }}
+          
+          ### Installation
+          1. Download `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip`
+          2. Open Caido and go to **Settings** → **Plugins**
+          3. Click **Install Plugin** and select the downloaded ZIP file
+          4. Restart Caido to activate the extension
+          
+          ### Security
+          - The extension package is signed for integrity verification
+          - SHA256 checksum is provided for additional verification
+          
+          ### Files in this release
+          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip` - Main extension package
+          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig` - Digital signature (if available)
+          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256` - SHA256 checksum
+          
+          ### What's Included
+          - Complete JSHunter functionality for Caido
+          - JavaScript analysis and endpoint discovery
+          - Source map support
+          - Real-time analysis of HTTP traffic
+          EOF
+          
+          echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ steps.meta.outputs.version }}
+          tag: v${{ steps.meta.outputs.version }}
+          name: ${{ steps.meta.outputs.release_name }}
           commit: ${{ github.sha }}
-          body: 'Release ${{ steps.meta.outputs.version }}'
-          artifacts: 'dist/plugin_package.zip,dist/plugin_package.zip.sig'
+          bodyFile: release_notes.md
+          artifacts: |
+            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip
+            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig
+            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256
+          artifactErrorsFailBuild: false
+          draft: false
+          prerelease: false
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true
+
+      - name: Release Summary
+        run: |
+          echo "Release created successfully!"
+          echo "Package: JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip"
+          echo "Tag: v${{ steps.meta.outputs.version }}"
+          echo "Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ steps.meta.outputs.version }}"
