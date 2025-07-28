@@ -1,16 +1,19 @@
 name: JSHunter Caido Plugin
 
 on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'packages/**'
+      - 'caido.config.ts'
+      - 'package.json'
+      - 'pnpm-*.yaml'
   workflow_dispatch:
     inputs:
       version:
         description: 'Version to release (optional, will use tag or auto-detect)'
         required: false
         type: string
-  push:
-    tags:
-      - 'v*'
-      - '*.*.*'
 
 env:
   NODE_VERSION: 20
@@ -81,8 +84,10 @@ jobs:
         id: meta
         working-directory: dist
         run: |
-          # Extract version from manifest
-          VERSION=$(unzip -p plugin_package.zip manifest.json | jq -r .version)
+          # Use current timestamp for latest builds
+          TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+          SHORT_SHA=${GITHUB_SHA:0:7}
+          VERSION="latest-${TIMESTAMP}-${SHORT_SHA}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           
           # Extract plugin name from manifest
@@ -90,7 +95,7 @@ jobs:
           echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
           
           # Create descriptive filename
-          RELEASE_NAME="JSHunter-Caido-Extension-v${VERSION}"
+          RELEASE_NAME="JSHunter-Caido-Extension-Latest"
           echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
           
           echo "Plugin: ${PLUGIN_NAME}"
@@ -101,14 +106,14 @@ jobs:
         working-directory: dist
         run: |
           # Rename files with descriptive names
-          cp plugin_package.zip JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip
+          cp plugin_package.zip JSHunter-Plugin.zip
           
           if [ -f "plugin_package.zip.sig" ]; then
-            cp plugin_package.zip.sig JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig
+            cp plugin_package.zip.sig JSHunter-Plugin.zip.sig
           fi
           
           # Create checksum
-          sha256sum JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip > JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256
+          sha256sum JSHunter-Plugin.zip > JSHunter-Plugin.zip.sha256
           
           ls -la
           echo "Release artifacts prepared"
@@ -117,10 +122,14 @@ jobs:
         id: release_notes
         run: |
           cat > release_notes.md << 'EOF'
-          ## JSHunter Caido Extension v${{ steps.meta.outputs.version }}
+          ## JSHunter Caido Extension - Latest Build
+          
+          **Build:** ${{ steps.meta.outputs.version }}  
+          **Commit:** ${{ github.sha }}  
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
           ### Installation
-          1. Download `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip`
+          1. Download `JSHunter-Plugin.zip`
           2. Open Caido and go to **Settings** → **Plugins**
           3. Click **Install Plugin** and select the downloaded ZIP file
           4. Restart Caido to activate the extension
@@ -130,15 +139,18 @@ jobs:
           - SHA256 checksum is provided for additional verification
           
           ### Files in this release
-          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip` - Main extension package
-          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig` - Digital signature (if available)
-          - `JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256` - SHA256 checksum
+          - `JSHunter-Plugin.zip` - Main extension package
+          - `JSHunter-Plugin.zip.sig` - Digital signature (if available)
+          - `JSHunter-Plugin.zip.sha256` - SHA256 checksum
           
           ### What's Included
           - Complete JSHunter functionality for Caido
           - JavaScript analysis and endpoint discovery
-          - Source map support
+          - Traffic capture with scope filtering
           - Real-time analysis of HTTP traffic
+          
+          ---
+          *This is an automatic build from the latest commit on main branch.*
           EOF
           
           echo "release_notes_file=release_notes.md" >> $GITHUB_OUTPUT
@@ -146,14 +158,14 @@ jobs:
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ steps.meta.outputs.version }}
+          tag: latest
           name: ${{ steps.meta.outputs.release_name }}
           commit: ${{ github.sha }}
           bodyFile: release_notes.md
           artifacts: |
-            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip
-            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sig
-            dist/JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip.sha256
+            dist/JSHunter-Plugin.zip
+            dist/JSHunter-Plugin.zip.sig
+            dist/JSHunter-Plugin.zip.sha256
           artifactErrorsFailBuild: false
           draft: false
           prerelease: false
@@ -164,6 +176,7 @@ jobs:
       - name: Release Summary
         run: |
           echo "Release created successfully!"
-          echo "Package: JSHunter-Caido-Extension-v${{ steps.meta.outputs.version }}.zip"
-          echo "Tag: v${{ steps.meta.outputs.version }}"
-          echo "Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ steps.meta.outputs.version }}"
+          echo "Package: JSHunter-Plugin.zip"
+          echo "Tag: latest"
+          echo "Build: ${{ steps.meta.outputs.version }}"
+          echo "Release URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/latest"
