@@ -39,8 +39,8 @@ const hasChanges = ref(false);
 const originalConfig = ref<AppConfig>({ captureTraffic: false, port: 20450, selectedScope: null });
 
 // Load current configuration on mount
+// Load current configuration on mount
 onMounted(async () => {
-  await loadScopes();
   await loadConfig();
 });
 
@@ -318,13 +318,14 @@ const onScopeChange = async () => {
         <p class="text-sm opacity-75 mb-2">
           Select a scope from your Caido configuration to define which URLs to capture.
         </p>
-        <Dropdown 
+                <Dropdown 
           v-model="selectedScope"
           :options="availableScopes"
           optionLabel="name"
           placeholder="Select a scope"
           class="w-full"
           @change="onScopeChange"
+          @click="loadScopes"
         >
           <template #option="slotProps">
             <div class="flex flex-col">

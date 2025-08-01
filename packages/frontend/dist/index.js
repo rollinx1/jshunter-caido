@@ -19040,7 +19040,7 @@ function jb(e, t, n, r, o, s) {
 Sl.render = jb;
 const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
   e.provide(Cl, t);
-}, Vb = () => un(Cl), Jt = (e) => (Ud("data-v-ba3e4957"), e = e(), Gd(), e), Bb = { class: "app-container" }, Mb = { class: "settings-panel" }, Rb = /* @__PURE__ */ Jt(() => /* @__PURE__ */ U(
+}, Vb = () => un(Cl), Jt = (e) => (Ud("data-v-a3ecd072"), e = e(), Gd(), e), Bb = { class: "app-container" }, Mb = { class: "settings-panel" }, Rb = /* @__PURE__ */ Jt(() => /* @__PURE__ */ U(
   "h2",
   { class: "text-xl font-bold mb-6 text-white" },
   "JSHunter Settings",
@@ -19106,7 +19106,7 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
   [
     /* @__PURE__ */ U("p", { class: "text-sm opacity-75" }, [
       /* @__PURE__ */ U("strong", null, "Note:"),
-      /* @__PURE__ */ dn(' URL and port changes require clicking "Save Changes" to apply. Traffic capture toggle and scope selection take effect immediately. ')
+      /* @__PURE__ */ dn(' Port changes require clicking "Save Changes" to apply. Traffic capture toggle and scope selection take effect immediately. ')
     ])
   ],
   -1
@@ -19116,7 +19116,7 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
   setup(e) {
     const t = Vb(), n = c0(), r = st(!1), o = st(20450), s = st(null), a = st([]), i = st(!1), l = st({ captureTraffic: !1, port: 20450, selectedScope: null });
     Mr(async () => {
-      await u(), await d();
+      await d();
     });
     const c = () => {
       var y, O;
@@ -19193,7 +19193,7 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
       try {
         await t.backend.updateConfig({
           port: o.value,
-          scope: s.value
+          scope: s.value || void 0
           // Send the complete scope object
         }), l.value = {
           captureTraffic: r.value,
@@ -19237,7 +19237,7 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
       console.log("Scope changed to:", s.value);
       try {
         await t.backend.updateConfig({
-          scope: s.value
+          scope: s.value || void 0
         }), l.value.selectedScope = s.value, n.add({
           severity: "success",
           summary: "Scope Updated",
@@ -19304,7 +19304,8 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
             optionLabel: "name",
             placeholder: "Select a scope",
             class: "w-full",
-            onChange: x
+            onChange: x,
+            onClick: u
           }, {
             option: He((k) => {
               var v, w;
@@ -19370,7 +19371,7 @@ const Cl = Symbol("FrontendSDK"), Fb = (e, t) => {
   for (const [r, o] of t)
     n[r] = o;
   return n;
-}, fg = /* @__PURE__ */ dg(ug, [["__scopeId", "data-v-ba3e4957"]]), pg = (e) => {
+}, fg = /* @__PURE__ */ dg(ug, [["__scopeId", "data-v-a3ecd072"]]), pg = (e) => {
   const t = Ep(fg);
   t.use(l0, {
     unstyled: !0,

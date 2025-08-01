@@ -260,8 +260,8 @@ export async function init(sdk: SDK<API>) {
     sdk.console.log(`[FILTER] Status: ${statusCode}, Content-Type: ${contentType}`);
 
     // Basic filtering: only HTML responses with status < 400
-    if (statusCode >= 400 || !contentType.toLowerCase().includes('html')) {
-      sdk.console.log(`[FILTER] Skipping - Status >= 400 or not HTML content`);
+    if (statusCode != 200 || !contentType.toLowerCase().includes('html')) {
+      sdk.console.log(`[FILTER] Skipping - Status != 200 or not HTML content`);
       return;
     }
 

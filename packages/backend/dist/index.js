@@ -295,8 +295,8 @@ async function init(sdk) {
     const responseHeaders = response.getHeaders();
     const contentType = responseHeaders["content-type"]?.[0] || responseHeaders["Content-Type"]?.[0] || "";
     sdk2.console.log(`[FILTER] Status: ${statusCode}, Content-Type: ${contentType}`);
-    if (statusCode >= 400 || !contentType.toLowerCase().includes("html")) {
-      sdk2.console.log(`[FILTER] Skipping - Status >= 400 or not HTML content`);
+    if (statusCode != 200 || !contentType.toLowerCase().includes("html")) {
+      sdk2.console.log(`[FILTER] Skipping - Status != 200 or not HTML content`);
       return;
     }
     sdk2.console.log(`[FILTER] Passed basic filtering - checking scope`);
