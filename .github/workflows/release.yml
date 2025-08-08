@@ -1,8 +1,6 @@
-name: Release JSHunter Plugin
+name: 🚀 Release
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
@@ -10,14 +8,14 @@ env:
   PNPM_VERSION: 9
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  release:
+    name: Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout
+      - name: Checkout project
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -29,43 +27,33 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
+          run_install: true
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build plugin
+      - name: Build package
         run: pnpm build
 
-      - name: Prepare release
+      - name: Sign package
         working-directory: dist
         run: |
-          cp plugin_package.zip JSHunter-Plugin.zip
-          sha256sum JSHunter-Plugin.zip > JSHunter-Plugin.zip.sha256
-          ls -la
+          if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
+            echo "Set an ed25519 key as PRIVATE_KEY in GitHub Action secret to sign."
+          else
+            echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+            openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
+            rm private_key.pem
+          fi
 
-      - name: Create Release
+      - name: Check version
+        id: meta
+        working-directory: dist
+        run: |
+          VERSION=$(unzip -p plugin_package.zip manifest.json | jq -r .version)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          tag: latest
-          name: Latest
-          body: |
-            ## JSHunter Caido Plugin - Latest Build
-            
-            **Commit:** ${{ github.sha }}
-            **Date:** ${{ github.event.head_commit.timestamp }}
-            
-            ### Installation
-            1. Download `JSHunter-Plugin.zip`
-            2. Open Caido → Settings → Plugins
-            3. Install the downloaded ZIP file
-            4. Restart Caido
-            
-            ### Files
-            - `JSHunter-Plugin.zip` - Main plugin package
-            - `JSHunter-Plugin.zip.sha256` - SHA256 checksum
-          artifacts: |
-            dist/JSHunter-Plugin.zip
-            dist/JSHunter-Plugin.zip.sha256
-          allowUpdates: true
-          removeArtifacts: true
-          makeLatest: true 
+          tag: ${{ steps.meta.outputs.version }}
+          commit: ${{ github.sha }}
+          body: 'Release ${{ steps.meta.outputs.version }}'
+          artifacts: 'dist/plugin_package.zip,dist/plugin_package.zip.sig'
