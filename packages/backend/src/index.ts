@@ -20,7 +20,7 @@ export async function init(sdk: SDK<API>) {
   sdk.events.onInterceptResponse(async (sdk, req, resp) => {
     const config = await getGlobalConfig(sdk);
     if (config && config.trafficCapture) {
-      sendToBackend(sdk, req.getId(), config.port);
+      sendToBackend(sdk, req.getId(), !!config.inScope, config.port);
     }
   });
 }

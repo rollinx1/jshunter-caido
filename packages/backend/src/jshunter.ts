@@ -8,57 +8,72 @@ const getAPI = (port: number) => ({
   endpoints: `http://localhost:${port}/api/collections/tmp_endpoints/records`,
 });
 
-async function sendToBackend(sdk: SDK, requestId: string, port?: number) {
-  const requestWrapper = await sdk.requests.get(requestId);
-
-  let configPort = port;
-  if (!configPort) {
-    const globalConfig = await getGlobalConfig(sdk);
-    if (globalConfig) {
-      configPort = globalConfig.port;
-    }
-  }
-  if (!requestWrapper) {
-    throw new Error("Request not found");
-  }
-  const request = requestWrapper.request;
-  const response = requestWrapper.response;
-  if (!response) {
-    throw new Error("Response not found");
-  }
-
-  const headers = request.getHeaders();
-  const flatHeaders = Object.fromEntries(
-    Object.entries(headers).map(([key, value]) => [key, value[0]])
-  ) as Record<string, string>;
-
-  const rawBody = response.getBody()?.toRaw();
-
-  // Extract query string from URL
-  const fullUrl = request.getUrl();
-  const urlParts = fullUrl.split("?");
-  const queryString = urlParts.length > 1 ? urlParts[1] : "";
-
-  // Prepare multipart form data
-  const multipartData: Record<string, string | Buffer> = {
-    url: String(urlParts[0] || ""),
-    query_string: String(queryString),
-    request_headers: JSON.stringify(flatHeaders),
-  };
-
-  if (!rawBody || rawBody.length === 0) {
-    return;
-  }
-  multipartData["tmp_body"] = rawBody;
-
+async function sendToBackend(
+  sdk: SDK,
+  requestId: string,
+  inScope?: boolean,
+  port?: number
+) {
   try {
+    let configPort = port;
+    let isInScope = inScope;
+    if (!configPort || !isInScope) {
+      const globalConfig = await getGlobalConfig(sdk);
+      if (globalConfig) {
+        configPort = globalConfig.port;
+        isInScope = !!globalConfig.inScope;
+      }
+    }
+    const requestWrapper = await sdk.requests.get(requestId);
+    if (!requestWrapper) {
+      throw new Error("Request not found");
+    }
+    const request = requestWrapper.request;
+    const response = requestWrapper.response;
+
+    if (!response) {
+      throw new Error("Response not found");
+    }
+
+    if (isInScope && !sdk.requests.inScope(request)) {
+      throw new Error("Request not in scope");
+    }
+    const rawBody = response.getBody()?.toRaw();
+    const contentType = response.getHeader("Content-Type");
+    sdk.console.log(contentType);
+    if (
+      rawBody === undefined ||
+      rawBody.length === 0 ||
+      response.getCode() !== 200 ||
+      contentType === undefined ||
+      !contentType[0]?.includes("html")
+    ) {
+      sdk.console.log("WTF");
+      throw new Error("Request does not fit the requirements to be processed");
+    }
+    const headers = request.getHeaders();
+    const flatHeaders = Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => [key, value[0]])
+    ) as Record<string, string>;
+    // Extract query string from URL
+    const fullUrl = request.getUrl();
+    const urlParts = fullUrl.split("?");
+    const queryString = urlParts.length > 1 ? urlParts[1] : "";
+
+    // Prepare multipart form data
+    const multipartData: Record<string, string | Buffer> = {
+      url: String(urlParts[0] || ""),
+      query_string: String(queryString),
+      request_headers: JSON.stringify(flatHeaders),
+    };
+
+    multipartData["tmp_body"] = rawBody;
     const API = getAPI(configPort!);
-    const response = await fetchRequest(API.endpoints, {
+    await fetchRequest(API.endpoints, {
       method: "POST",
       multipartData,
     });
-    sdk.console.log(`Response: ${JSON.stringify(response)}`);
-    return { success: true, response };
+    return { success: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     sdk.console.error("Error making fetch request: " + errorMessage);

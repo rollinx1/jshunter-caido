@@ -7,11 +7,11 @@ import tailwindCaido from "@caido/tailwindcss";
 import path from "path";
 import prefixwrap from "postcss-prefixwrap";
 
-const id = "frontend-jshunter";
+const id = "jshunter";
 export default defineConfig({
   id,
-  name: "Frontend JSHunter",
-  description: "Plugin template with frontend using VueJS",
+  name: "JSHunter",
+  description: "Analyze all your JavaScript in one place",
   version: "0.0.0",
   author: {
     name: "Caido Labs Inc.",
