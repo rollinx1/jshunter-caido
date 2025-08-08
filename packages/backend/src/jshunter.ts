@@ -40,7 +40,6 @@ async function sendToBackend(
     }
     const rawBody = response.getBody()?.toRaw();
     const contentType = response.getHeader("Content-Type");
-    sdk.console.log(contentType);
     if (
       rawBody === undefined ||
       rawBody.length === 0 ||
@@ -48,7 +47,6 @@ async function sendToBackend(
       contentType === undefined ||
       !contentType[0]?.includes("html")
     ) {
-      sdk.console.log("WTF");
       throw new Error("Request does not fit the requirements to be processed");
     }
     const headers = request.getHeaders();
